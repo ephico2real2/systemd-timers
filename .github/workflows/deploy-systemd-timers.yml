@@ -1,0 +1,163 @@
+name: Deploy & Test Systemd Timers
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      # Step 1: Validate Environment
+      - name: Validate Environment
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            echo "🔍 Checking system requirements..."
+            python3 --version || { echo "❌ Python3 not found"; exit 1; }
+            df -h /usr/local | awk 'NR==2 {if ($4+0 < 1) exit 1}'  || { echo "❌ Low disk space"; exit 1; }
+            systemctl --version || { echo "❌ Systemd not found"; exit 1; }
+          EOF
+
+      # Step 2: Backup Existing Configuration
+      - name: Backup Existing Configuration
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            backup_dir="/root/systemd-backups/$(date +%Y%m%d_%H%M%S)"
+            sudo mkdir -p "$backup_dir"
+            for service in zendesk-it-glue it-glue-backup jamf-pro-notifications zendesk-statusio; do
+              sudo cp /etc/systemd/system/$service.{service,timer} "$backup_dir/" 2>/dev/null || true
+            done
+            sudo cp -r /usr/local/dotmobi-tools "$backup_dir/" 2>/dev/null || true
+            cd /root/systemd-backups && ls -t | tail -n +6 | xargs sudo rm -rf
+            echo "📦 Backup created in $backup_dir"
+          EOF
+
+      # Step 3: Prepare Deployment Folder
+      - name: Prepare Deployment Folder
+        run: ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} "rm -rf ~/deploy-temp && mkdir -p ~/deploy-temp"
+
+      # Step 4: Copy Deployment Files
+      - name: Copy Deployment Files
+        run: scp -r systemd-timer dotmobi-tools ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }}:~/deploy-temp/
+
+      # Step 5: Configure Logs, Python Dependencies & Logrotate
+      - name: Configure Logs & Install Dependencies
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            set -euxo pipefail
+            echo "🚀 Configuring Logs & Installing Dependencies..."
+            
+            # ✅ Ensure log directory exists
+            sudo mkdir -p /usr/local/api/logs && sudo chmod 777 /usr/local/api/logs
+
+            # ✅ Install Python dependencies
+            sudo apt update && sudo apt install -y python3-pip
+            sudo /usr/bin/python3 -m pip install --upgrade google-api-python-client
+
+            # ✅ Ensure Logrotate directory exists
+            sudo mkdir -p /etc/logrotate.d/
+
+            # ✅ Logrotate configuration
+            sudo tee /etc/logrotate.d/api-logs <<EOL
+/usr/local/api/logs/*.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    copytruncate
+    delaycompress
+    notifempty
+    create 644 root root
+    dateext
+    dateformat -%Y%m%d
+    su root root
+}
+EOL
+            # ✅ Test log rotation (dry-run)
+            sudo logrotate -d /etc/logrotate.d/api-logs
+            echo "✅ Logrotate & Dependencies Configured."
+          EOF
+
+      # Step 6: Deploy Systemd Services & Restart Timers
+      - name: Deploy Systemd Services & Restart Timers
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            set -euxo pipefail
+
+            # ✅ Function to check timer status (with retry)
+            check_timer() {
+              local timer_name="$1"
+              echo "🔍 Checking status of $timer_name..."
+              for i in {1..3}; do
+                if systemctl is-active --quiet "$timer_name"; then
+                  echo "✅ Timer $timer_name is running"
+                  return 0
+                fi
+                echo "⚠️ Timer $timer_name is not active, retrying ($i/3)..."
+                sleep 2
+              done
+              echo "❌ ERROR: Timer $timer_name failed to start!"
+              systemctl status "$timer_name"
+              return 1
+            }
+
+            echo "🚀 Deploying Systemd Services & Restarting Timers..."
+            sudo cp -f ~/deploy-temp/systemd-timer/*.service /etc/systemd/system/
+            sudo cp -f ~/deploy-temp/systemd-timer/*.timer /etc/systemd/system/
+
+            # ✅ Validate systemd unit files
+            for service in zendesk-it-glue it-glue-backup jamf-pro-notifications zendesk-statusio; do
+                sudo systemd-analyze verify "/etc/systemd/system/$service.service" || exit 1
+                sudo systemd-analyze verify "/etc/systemd/system/$service.timer" || exit 1
+            done
+
+            # ✅ Deploy scripts & set permissions
+            sudo find /usr/local/dotmobi-tools -type f -delete
+            sudo cp -r ~/deploy-temp/dotmobi-tools/* /usr/local/dotmobi-tools/
+            sudo find /usr/local/dotmobi-tools -type f \( -name "*.sh" -o -name "*.py" \) -exec chmod +x {} \;
+
+            # ✅ Reload systemd and enable timers
+            sudo systemctl daemon-reload
+            for timer in zendesk-it-glue it-glue-backup jamf-pro-notifications zendesk-statusio; do
+              sudo systemctl enable --now "$timer.timer"
+              sudo systemctl restart "$timer.timer"
+              check_timer "$timer.timer"
+            done
+
+            # ✅ Show next scheduled runs
+            echo "📅 Next scheduled runs:"
+            sudo systemctl list-timers --all | grep -E "zendesk|it-glue|jamf"
+
+            echo "✅ Deployment completed successfully."
+          EOF
+
+      # Step 7: Cleanup
+      - name: Cleanup
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            echo "🧹 Cleaning up temporary files..."
+            for service in zendesk-it-glue it-glue-backup jamf-pro-notifications zendesk-statusio; do
+              sudo systemctl reset-failed "$service.service" || true
+              sudo systemctl reset-failed "$service.timer" || true
+            done
+            rm -rf ~/deploy-temp
+          EOF
+
+      # Step 8: Send Deployment Notification
+      - name: Send Deployment Notification
+        run: |
+          curl -X POST -H 'Content-type: application/json' --data '{"text": "Systemd Timer Deployment ${{ job.status }}"}' ${{ secrets.WEBHOOK_URL }}
+

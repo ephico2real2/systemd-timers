@@ -72,20 +72,20 @@ jobs:
 
             # ✅ Logrotate configuration
             sudo tee /etc/logrotate.d/api-logs <<EOL
-/usr/local/api/logs/*.log {
-    daily
-    rotate 7
-    compress
-    missingok
-    copytruncate
-    delaycompress
-    notifempty
-    create 644 root root
-    dateext
-    dateformat -%Y%m%d
-    su root root
-}
-EOL
+                          /usr/local/api/logs/*.log {
+                              daily
+                              rotate 7
+                              compress
+                              missingok
+                              copytruncate
+                              delaycompress
+                              notifempty
+                              create 644 root root
+                              dateext
+                              dateformat -%Y%m%d
+                              su root root
+                          }
+                          EOL
             # ✅ Test log rotation (dry-run)
             sudo logrotate -d /etc/logrotate.d/api-logs
             echo "✅ Logrotate & Dependencies Configured."

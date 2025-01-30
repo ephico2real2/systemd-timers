@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs IT Glue Export Backup Every Monday at 08:00 AM
+
+[Timer]
+OnCalendar=Mon *-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

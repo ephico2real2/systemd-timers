@@ -1,0 +1,17 @@
+[Unit]
+Description=Zendesk Statusio Integration
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/zendesk_statusio_integration.py
+WorkingDirectory=/usr/local/dotmobi-tools/scripts
+User=root
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+StandardOutput=journal+console
+StandardError=journal+console
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

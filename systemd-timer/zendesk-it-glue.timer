@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs Zendesk IT Glue Integration at 15 minutes past every hour
+
+[Timer]
+OnCalendar=*-*-* *:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

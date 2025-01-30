@@ -1,0 +1,17 @@
+[Unit]
+Description=Jamf Pro Get Notifications
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/jamf_pro_get_notifications.py
+WorkingDirectory=/usr/local/dotmobi-tools/scripts
+User=root
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+StandardOutput=journal+console
+StandardError=journal+console
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

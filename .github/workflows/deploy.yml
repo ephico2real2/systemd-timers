@@ -1,0 +1,104 @@
+name: Deploy System Monitor
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          script: |
+            # Validate Environment
+            echo "🔍 Checking system requirements..."
+            python3 --version || { echo "❌ Python3 not found"; exit 1; }
+            df -h /usr/local | awk 'NR==2 {if ($4+0 < 1) exit 1}'  || { echo "❌ Low disk space"; exit 1; }
+            systemctl --version || { echo "❌ Systemd not found"; exit 1; }
+
+            # Prepare deployment folder
+            rm -rf ~/deploy-temp && mkdir -p ~/deploy-temp
+
+            # Create required directories
+            sudo mkdir -p /usr/local/api/logs
+            sudo mkdir -p /usr/local/dotmobi-tools/scripts
+            sudo mkdir -p /etc/system-monitor
+
+            # Set directory permissions
+            sudo chmod 755 /usr/local/api/logs
+            sudo chmod 755 /usr/local/dotmobi-tools/scripts
+
+            # Install Python dependencies
+            sudo apt update
+            sudo apt install -y python3-pip
+            sudo pip3 install psutil requests pyyaml
+
+      - name: Copy Files to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          source: "system_monitor.py,systemd-timer/*"
+          target: "~/deploy-temp"
+          strip_components: 0
+
+      - name: Deploy and Enable Services
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          script: |
+            set -euxo pipefail
+
+            # Copy monitoring script
+            sudo cp ~/deploy-temp/system_monitor.py /usr/local/dotmobi-tools/scripts/
+            sudo chmod +x /usr/local/dotmobi-tools/scripts/system_monitor.py
+
+            # Copy systemd files
+            sudo cp ~/deploy-temp/systemd-timer/* /etc/systemd/system/
+
+            # Set proper permissions
+            sudo chown root:root /etc/systemd/system/system-monitor.*
+            sudo chmod 644 /etc/systemd/system/system-monitor.*
+
+            # Configure logrotate
+            sudo tee /etc/logrotate.d/system-monitor <<EOL
+            /usr/local/api/logs/*.log /usr/local/api/logs/*.json {
+                daily
+                rotate 7
+                compress
+                delaycompress
+                missingok
+                notifempty
+                create 644 root root
+                su root root
+            }
+            EOL
+
+            # Reload systemd and start services
+            sudo systemctl daemon-reload
+            sudo systemctl enable system-monitor.timer
+            sudo systemctl start system-monitor.timer
+
+            # Show status
+            sudo systemctl list-timers --all | grep system-monitor
+
+            # Cleanup
+            rm -rf ~/deploy-temp

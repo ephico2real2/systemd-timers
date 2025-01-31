@@ -91,17 +91,17 @@ jobs:
         run: |
           ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
             sudo tee /etc/logrotate.d/system-monitor <<EOL
-/usr/local/api/logs/*.log /usr/local/api/logs/*.json {
-    daily
-    rotate 7
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 644 root root
-    su root root
-}
-EOL
+                    /usr/local/api/logs/*.log /usr/local/api/logs/*.json {
+                        daily
+                        rotate 7
+                        compress
+                        delaycompress
+                        missingok
+                        notifempty
+                        create 644 root root
+                        su root root
+                    }
+                   EOL
           EOF
 
       # Step 7: Enable and Start Services

@@ -1,0 +1,11 @@
+# system-monitor.timer
+[Unit]
+Description=Run System Resource Monitor Every Minute
+
+[Timer]
+OnCalendar=*:*:00
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=System Resource Monitor
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/dotmobi-tools/venv/bin/python3 /usr/local/dotmobi-tools/scripts/system_monitor.py
+WorkingDirectory=/usr/local/dotmobi-tools/scripts
+User=root
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal+console
+StandardError=journal+console
+
+# Environment setup
+Environment="PATH=/usr/local/dotmobi-tools/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="ALERT_WEBHOOK_URL="  # Set your webhook URL here if needed
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=25%
+IOWeight=100
+
+[Install]
+WantedBy=multi-user.target

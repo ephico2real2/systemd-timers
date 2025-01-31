@@ -1,0 +1,130 @@
+name: Deploy System Monitor
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      # Step 1: Validate Environment
+      - name: Validate Environment
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            echo "🔍 Checking system requirements..."
+            python3 --version || { echo "❌ Python3 not found"; exit 1; }
+            df -h /usr/local | awk 'NR==2 {if ($4+0 < 1) exit 1}'  || { echo "❌ Low disk space"; exit 1; }
+            systemctl --version || { echo "❌ Systemd not found"; exit 1; }
+          EOF
+
+      # Step 2: Prepare Deployment Folder
+      - name: Prepare Deployment Folder
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} "
+            rm -rf ~/deploy-temp && mkdir -p ~/deploy-temp
+          "
+
+      # Step 3: Copy Files
+      - name: Copy Deployment Files
+        run: |
+          # Copy monitoring script and requirements
+          scp sample/system_monitor.py sample/requirements.txt ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }}:~/deploy-temp/
+          # Copy systemd files
+          scp systemd-timer/* ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }}:~/deploy-temp/
+
+      # Step 4: Setup Directories and Install Dependencies
+      - name: Setup Environment
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            set -euxo pipefail
+
+            # Create required directories
+            sudo mkdir -p /usr/local/api/logs
+            sudo mkdir -p /usr/local/dotmobi-tools/scripts
+            sudo mkdir -p /etc/system-monitor
+
+            # Set directory permissions
+            sudo chmod 755 /usr/local/api/logs
+            sudo chmod 755 /usr/local/dotmobi-tools/scripts
+
+            # Install Python dependencies
+            sudo apt update
+            sudo apt install -y python3-pip
+            sudo pip3 install -r ~/deploy-temp/requirements.txt
+          EOF
+
+      # Step 5: Deploy Files
+      - name: Deploy Files
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            set -euxo pipefail
+
+            # Copy monitoring script
+            sudo cp ~/deploy-temp/system_monitor.py /usr/local/dotmobi-tools/scripts/
+            sudo chmod +x /usr/local/dotmobi-tools/scripts/system_monitor.py
+
+            # Copy systemd files
+            sudo cp ~/deploy-temp/system-monitor.service /etc/systemd/system/
+            sudo cp ~/deploy-temp/system-monitor.timer /etc/systemd/system/
+
+            # Set proper permissions
+            sudo chown root:root /etc/systemd/system/system-monitor.*
+            sudo chmod 644 /etc/systemd/system/system-monitor.*
+          EOF
+
+      # Step 6: Configure Logrotate
+      - name: Configure Logrotate
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            sudo tee /etc/logrotate.d/system-monitor <<EOL
+/usr/local/api/logs/*.log /usr/local/api/logs/*.json {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+    su root root
+}
+EOL
+          EOF
+
+      # Step 7: Enable and Start Services
+      - name: Enable Services
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            set -euxo pipefail
+
+            # Reload systemd
+            sudo systemctl daemon-reload
+
+            # Enable and start timer
+            sudo systemctl enable system-monitor.timer
+            sudo systemctl start system-monitor.timer
+
+            # Show next scheduled runs
+            sudo systemctl list-timers --all | grep system-monitor
+          EOF
+
+      # Step 8: Cleanup
+      - name: Cleanup
+        if: always()
+        run: |
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            rm -rf ~/deploy-temp
+          EOF

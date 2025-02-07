@@ -7,22 +7,21 @@ These **service and timer files** should be placed inside the **`systemd-timer`*
 ```sh
 cat <<EOF > systemd-timer/zendesk-it-glue.service
 [Unit]
-Description=Zendesk IT Glue Integration
-After=network.target
+Description=- Zendesk IT Glue Integration
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/zendesk_it_glue_integration.py
 WorkingDirectory=/usr/local/dotmobi-tools/scripts
 User=root
-Restart=always
-RestartSec=1
-StartLimitIntervalSec=0
 StandardOutput=journal+console
 StandardError=journal+console
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 ```
 
@@ -32,10 +31,12 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/zendesk-it-glue.timer
 [Unit]
-Description=Runs Zendesk IT Glue Integration at 15 minutes past every hour
+Description=- Runs Zendesk IT Glue Integration at 15 minutes past every hour
 
 [Timer]
+Unit=zendesk-it-glue.service
 OnCalendar=*-*-* *:15:00
+AccuracySec=1s
 Persistent=true
 
 [Install]
@@ -49,22 +50,21 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/it-glue-backup.service
 [Unit]
-Description=IT Glue Export Backup
-After=network.target
+Description=- IT Glue Export Backup
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/it_glue_export_backup.py
 WorkingDirectory=/usr/local/dotmobi-tools/scripts
 User=root
-Restart=always
-RestartSec=1
-StartLimitIntervalSec=0
 StandardOutput=journal+console
 StandardError=journal+console
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 ```
 
@@ -74,10 +74,12 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/it-glue-backup.timer
 [Unit]
-Description=Runs IT Glue Export Backup Every Monday at 08:00 AM
+Description=- Runs IT Glue Export Backup Every Monday at 08:00 AM
 
 [Timer]
+Unit=it-glue-backup.service
 OnCalendar=Mon *-*-* 08:00:00
+AccuracySec=1s
 Persistent=true
 
 [Install]
@@ -91,22 +93,21 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/jamf-pro-notifications.service
 [Unit]
-Description=Jamf Pro Get Notifications
-After=network.target
+Description=- Jamf Pro Get Notifications
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/jamf_pro_get_notifications.py
 WorkingDirectory=/usr/local/dotmobi-tools/scripts
 User=root
-Restart=always
-RestartSec=1
-StartLimitIntervalSec=0
 StandardOutput=journal+console
 StandardError=journal+console
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 ```
 
@@ -116,10 +117,12 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/jamf-pro-notifications.timer
 [Unit]
-Description=Runs Jamf Pro Get Notifications at 30 minutes past every hour
+Description=- Runs Jamf Pro Get Notifications at 30 minutes past every hour
 
 [Timer]
+Unit=jamf-pro-notifications.service
 OnCalendar=*-*-* *:30:00
+AccuracySec=1s
 Persistent=true
 
 [Install]
@@ -133,22 +136,20 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/zendesk-statusio.service
 [Unit]
-Description=Zendesk Statusio Integration
+Description=- Zendesk Statusio Integration
 After=network.target
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/dotmobi-tools/scripts/zendesk_statusio_integration.py
 WorkingDirectory=/usr/local/dotmobi-tools/scripts
 User=root
-Restart=always
-RestartSec=1
-StartLimitIntervalSec=0
 StandardOutput=journal+console
 StandardError=journal+console
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 ```
 
@@ -158,10 +159,12 @@ EOF
 ```sh
 cat <<EOF > systemd-timer/zendesk-statusio.timer
 [Unit]
-Description=Runs Zendesk Statusio Integration Hourly
+Description=- Runs Zendesk Statusio Integration Hourly
 
 [Timer]
+Unit=zendesk-statusio.service
 OnCalendar=hourly
+AccuracySec=1s
 Persistent=true
 
 [Install]

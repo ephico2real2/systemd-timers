@@ -27,6 +27,12 @@ jobs:
             set -e
             echo "🔍 Checking system requirements..."
             python3 --version || { echo "❌ Python3 not found"; exit 1; }
+            
+            # Set the default time zone to Europe/London
+            echo "🌍 Setting time zone to Europe/London..."
+            sudo timedatectl set-timezone Europe/London
+            timedatectl status
+            
             # Get available disk space in human-readable format and in bytes.
             free_space_hr=$(df --output=avail -h /usr/local | tail -n 1 | tr -d ' ')
             free_space_bytes=$(df --output=avail -B1 /usr/local | tail -n 1 | tr -d ' ')

@@ -70,21 +70,38 @@ jobs:
           script: |
             set -ex
             rm -rf ~/deploy-temp && mkdir -p ~/deploy-temp
-            sudo mkdir -p /usr/local/api/logs /usr/local/dotmobi-tools/scripts /etc/system-monitor
+            sudo mkdir -p /usr/local/api/logs /usr/local/dotmobi-tools/scripts
             sudo chmod 755 /usr/local/api/logs /usr/local/dotmobi-tools/scripts
             sudo apt update && sudo apt install -y python3-pip
             sudo /usr/bin/python3 -m pip install --upgrade google-api-python-client
 
-      # Step 4: Copy Deployment Files
+      # # Step 4: Copy Deployment Files
+      # - name: Copy Deployment Files
+      #   uses: appleboy/scp-action@master
+      #   with:
+      #     host: ${{ secrets.AWS_HOST }}
+      #     username: ${{ secrets.REMOTE_USER }}
+      #     key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+      #     source: "systemd-timer/*,dotmobi-tools/*"
+      #     target: "~/deploy-temp"
+      #     strip_components: 0
+          
+        # Step 4: Copy Deployment Files using SSH instead of SCP Action
       - name: Copy Deployment Files
-        uses: appleboy/scp-action@master
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
-          source: "systemd-timer/*,dotmobi-tools/*"
-          target: "~/deploy-temp"
-          strip_components: 0
+          script: |
+            set -e
+            echo "🚀 Copying deployment files..."
+            # Ensure deploy-temp directory exists
+            rm -rf ~/deploy-temp && mkdir -p ~/deploy-temp
+            # Use SCP to transfer files from GitHub Actions runner to the remote host
+            scp -o StrictHostKeyChecking=no -r systemd-timer/* dotmobi-tools/* ${{ secrets.REMOTE_USER }}@${{ secrets.AWS_HOST }}:~/deploy-temp/
+            echo "✅ Files successfully copied to ~/deploy-temp"
+
 
       # Step 5: Configure Logrotate
       - name: Configure Logrotate

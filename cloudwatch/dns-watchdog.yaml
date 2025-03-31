@@ -1,4 +1,4 @@
-#Monitoring DNS resolution failures using AWS services.
+# Monitoring DNS resolution failures using AWS services.
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
@@ -200,7 +200,3 @@ Outputs:
     Description: "Name of the CloudWatch Log Group being monitored for DNS watchdog events."
     Value: !Ref LogGroupName
 ```
-
-**Key Features of the Template:**
-
-- **Parameterization:** The template allows customization of log group names, notification endpoints, and alarm thresholds, providing flexibility 

@@ -1,3 +1,5 @@
+# Monitor DNS logs for errors
+
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudWatch Alarms for DNS Watchdog Service with JSM Integration'

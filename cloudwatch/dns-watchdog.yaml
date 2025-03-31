@@ -1,5 +1,3 @@
-# Monitoring DNS resolution failures using AWS services.
-
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudWatch Alarms for DNS Watchdog Service with JSM Integration'
